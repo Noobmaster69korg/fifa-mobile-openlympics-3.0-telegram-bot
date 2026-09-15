@@ -3,7 +3,7 @@
 A Telegram bot that handles **scheduling, results, and the points table**
 for the Openlympics 3.0 FIFA Mobile tournament. It works the same way as
 the Hand Cricket bot from the same event, adapted for goals/points/goal
-difference instead of runs.
+difference instead of runs
 
 ## Format
 
