@@ -8,7 +8,7 @@ and lets an admin create knockout-stage matches once the league concludes.
 Run with:
     BOT_TOKEN=xxxx INITIAL_ADMIN_ID=123456789 python bot.py
 """
-
+print("=== FIFA BOT VERSION: GITHUB-CURRENT ===")
 import logging
 import os
 
