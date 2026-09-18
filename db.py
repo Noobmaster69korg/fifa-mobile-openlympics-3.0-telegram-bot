@@ -185,6 +185,32 @@ def get_match(match_id: int):
         return conn.execute("SELECT * FROM matches WHERE id = ?", (match_id,)).fetchone()
 
 
+def delete_match(match_id: int) -> bool:
+    with get_conn() as conn:
+        cur = conn.execute("DELETE FROM matches WHERE id = ?", (match_id,))
+        return cur.rowcount > 0
+
+
+def remove_player(name: str):
+    """Deletes a player and every match (any stage, played or not) they're
+    part of. Returns {'name': canonical_name, 'matches_deleted': n} or None
+    if no such player exists."""
+    with get_conn() as conn:
+        player = conn.execute(
+            "SELECT * FROM players WHERE LOWER(name) = LOWER(?)", (name,)
+        ).fetchone()
+        if not player:
+            return None
+        canonical = player["name"]
+        cur = conn.execute(
+            "DELETE FROM matches WHERE LOWER(player1)=LOWER(?) OR LOWER(player2)=LOWER(?)",
+            (canonical, canonical),
+        )
+        matches_deleted = cur.rowcount
+        conn.execute("DELETE FROM players WHERE id = ?", (player["id"],))
+        return {"name": canonical, "matches_deleted": matches_deleted}
+
+
 def set_result(match_id: int, goals1: int, goals2: int):
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM matches WHERE id = ?", (match_id,)).fetchone()
