@@ -8,7 +8,7 @@ and lets an admin create knockout-stage matches once the league concludes.
 Run with:
     BOT_TOKEN=xxxx INITIAL_ADMIN_ID=123456789 python bot.py
 """
-print("=== FIFA BOT VERSION: GITHUB-CURRENT ===")
+
 import logging
 import os
 
@@ -48,6 +48,10 @@ def admin_only(func):
             return
         return await func(update, context)
     return wrapper
+
+
+def stage_display_name(stage: str) -> str:
+    return db.STAGE_LABELS.get(stage, stage.replace("_", " ").title())
 
 
 def format_match_line(m) -> str:
@@ -110,6 +114,8 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"/creatematch{tag} &lt;stage&gt; &lt;player1&gt; &lt;player2&gt; [label] — add a knockout match\n"
             "  stages: round16, quarterfinal, semifinal, final, third_place\n"
             f"/addplayer{tag} &lt;name&gt; — add a player (e.g. a replacement)\n"
+            f"/removeplayer{tag} &lt;name&gt; — remove a player and delete all their matches\n"
+            f"/deletematch{tag} &lt;match_id&gt; — delete a wrongly-created match\n"
             f"/addadmin{tag} &lt;user_id&gt; — add another admin\n"
             f"/removeadmin{tag} &lt;user_id&gt; — remove an admin\n"
             f"/listadmins{tag} — list current admins\n"
@@ -162,7 +168,7 @@ async def table_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     key = context.args[0].lower() if context.args else "league"
     stage = STAGE_ALIASES.get(key, key)
     rows = db.standings_for(stage)
-    title = f"{db.STAGE_LABELS.get(stage, stage.title())} points table"
+    title = f"{stage_display_name(stage)} points table"
     await update.message.reply_text(format_table(rows, title), parse_mode="HTML")
 
 
@@ -293,6 +299,49 @@ async def addplayer_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 @admin_only
+async def removeplayer_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text(
+            "Usage: /removeplayer <name>\n"
+            "This deletes the player AND every match they're in (league + any "
+            "knockout stage, played or not) — this can't be undone."
+        )
+        return
+    name = " ".join(context.args)
+    result = db.remove_player(name)
+    if not result:
+        await update.message.reply_text(f"No player named '{name}' found.")
+        return
+    await update.message.reply_text(
+        f"Removed {result['name']} and deleted {result['matches_deleted']} "
+        f"associated match(es)."
+    )
+
+
+@admin_only
+async def deletematch_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text(
+            "Usage: /deletematch <match_id>\n(match ids show as #123 in /schedule, /pending, etc.)"
+        )
+        return
+    try:
+        match_id = int(context.args[0].lstrip("#"))
+    except ValueError:
+        await update.message.reply_text("match_id must be a number, e.g. /deletematch 42")
+        return
+    match = db.get_match(match_id)
+    if not match:
+        await update.message.reply_text(f"No match found with id #{match_id}.")
+        return
+    db.delete_match(match_id)
+    await update.message.reply_text(
+        f"Deleted match #{match_id}: {match['player1']} vs {match['player2']} "
+        f"({stage_display_name(match['stage'])})."
+    )
+
+
+@admin_only
 async def addadmin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await update.message.reply_text("Usage: /addadmin <user_id>")
@@ -360,6 +409,8 @@ def main():
     app.add_handler(CommandHandler("editresult", editresult_cmd))
     app.add_handler(CommandHandler("creatematch", creatematch_cmd))
     app.add_handler(CommandHandler("addplayer", addplayer_cmd))
+    app.add_handler(CommandHandler("removeplayer", removeplayer_cmd))
+    app.add_handler(CommandHandler("deletematch", deletematch_cmd))
     app.add_handler(CommandHandler("addadmin", addadmin_cmd))
     app.add_handler(CommandHandler("removeadmin", removeadmin_cmd))
     app.add_handler(CommandHandler("listadmins", listadmins_cmd))
